@@ -113,109 +113,217 @@ class Board:
                 result, captured, visited = self._check_capture_path(piece, piece.row, piece.col, dest_row, dest_col, [], set())
                 return result, captured, visited
 
-            # Damka moves
+        # Damka moves
         if piece.king:
             # Musi się poruszać po przekątnej
             if abs(row_diff) != abs(col_diff):
                 return False, [], set()
 
-            step_row = 1 if row_diff > 0 else -1
-            step_col = 1 if col_diff > 0 else -1
-            current_row = piece.row + step_row
-            current_col = piece.col + step_col
-            piece_to_capture = None
-            capture_pos = None
+            # Dla damki używamy _check_capture_path tak samo jak dla zwykłych pionków
+            result, captured, visited = self._check_capture_path(piece, piece.row, piece.col, dest_row, dest_col, [], set())
+            if result:
+                return result, captured, visited
 
-            # Sprawdzanie ścieżki ruchu
-            while current_row != dest_row and current_col != dest_col:
-                current_piece = self.get_piece(current_row, current_col)
-                if current_piece != 0:
-                    # Jeśli już znaleźliśmy pionek do zbicia, to nie możemy przeskakiwać więcej
-                    if piece_to_capture:
-                        return False, [], set()
-                    # Nie możemy przeskakiwać własnych pionków
-                    if current_piece.color == piece.color:
-                        return False, [], set()
-                    piece_to_capture = current_piece
-                    capture_pos = (current_row, current_col)
-                current_row += step_row
-                current_col += step_col
-
-            # Jeśli znaleziono pionek do zbicia
-            if piece_to_capture:
-                # Sprawdź czy jest możliwe inne bicie
-                if self.can_capture(piece) and (capture_pos not in [(capture_pos[0], capture_pos[1])]):
-                    return False, [], set()
-                return True, [capture_pos], {(dest_row, dest_col)}
-
-            # Zwykły ruch - tylko jeśli nie ma możliwości bicia
+            # Jeśli nie ma bicia, sprawdź zwykły ruch
             if not self.can_capture(piece):
+                # Sprawdź czy na drodze nie ma żadnych pionków
+                step_row = 1 if row_diff > 0 else -1
+                step_col = 1 if col_diff > 0 else -1
+                current_row = piece.row + step_row
+                current_col = piece.col + step_col
+
+                while current_row != dest_row and current_col != dest_col:
+                    if self.get_piece(current_row, current_col) != 0:
+                        return False, [], set()
+                    current_row += step_row
+                    current_col += step_col
+
                 return True, [], {(dest_row, dest_col)}
+
             return False, [], set()
         # Jeśli żaden warunek nie został spełniony
         return False, [], set()
 
     def _check_capture_path(self, piece, current_row, current_col, dest_row, dest_col, captured_pieces, visited):
-        
-        if piece.king:
-            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
-            for dr, dc in directions:
-                current_row = piece.row + dr
-                current_col = piece.col + dc
-                found_piece = False
-                
-                while 0 <= current_row < ROWS and 0 <= current_col < COLS:
-                    current_piece = self.get_piece(current_row, current_col)
-                    if current_piece != 0:
-                        if current_piece.color == piece.color:
-                            break
-                        if found_piece:  # Już znaleźliśmy jeden pionek
-                            break
-                        found_piece = True
-                    elif found_piece:  # Znaleźliśmy pionek i puste pole za nim
-                        return True
-                    current_row += dr
-                    current_col += dc
-            return False
-        
         # Jeśli dotarliśmy do celu
         if current_row == dest_row and current_col == dest_col:
             return len(captured_pieces) > 0, captured_pieces, visited
 
         # Sprawdź wszystkie możliwe kierunki bicia
-        directions = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
+        if piece.king:
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]  # Damka może iść w każdym kierunku
+        else:
+            directions = [(-2, -2), (-2, 2), (2, -2), (2, 2)]  # Zwykły pionek tylko o 2 pola
         
         for dr, dc in directions:
-            new_row = current_row + dr
-            new_col = current_col + dc
-            
-            # Sprawdź czy nowa pozycja jest w granicach planszy
-            if not (0 <= new_row < ROWS and 0 <= new_col < COLS):
-                continue
+            if piece.king:
+                # Dla damki - szukamy pionków do zbicia w danym kierunku
+                new_row = current_row + dr
+                new_col = current_col + dc
+                found_piece = False
                 
-            mid_row = current_row + dr//2
-            mid_col = current_col + dc//2
-            
-            if self.get_piece(new_row, new_col) != 0:
-                continue
-            
-            piece_to_capture = self.get_piece(mid_row, mid_col)
-            if (piece_to_capture == 0 or 
-                piece_to_capture.color == piece.color or 
-                (mid_row, mid_col) in captured_pieces):  # Usunięto warunek sprawdzający czy zbijany pionek jest damką
-                continue
-                
-            new_captured = captured_pieces + [(mid_row, mid_col)]
-            new_visited = visited | {(new_row, new_col)}
-            
-            if (new_row, new_col) not in visited:
-                result, final_captured, final_visited = self._check_capture_path(
-                    piece, new_row, new_col, dest_row, dest_col, new_captured, new_visited)
-                if result:
-                    return True, final_captured, final_visited
+                # Sprawdzaj daną przekątną
+                while 0 <= new_row < ROWS and 0 <= new_col < COLS:
+                    current_piece = self.get_piece(new_row, new_col)
                     
+                    if current_piece != 0:
+                        if current_piece.color == piece.color:
+                            break  # Własny pionek - nie możemy go przeskoczyć
+                        if (new_row, new_col) in captured_pieces:
+                            break  # Ten pionek już został zbity
+                        # Znaleźliśmy pionek do zbicia
+                        found_piece = True
+                        capture_pos = (new_row, new_col)
+                        
+                        # Sprawdź pola za znalezionym pionkiem
+                        next_row = new_row + dr
+                        next_col = new_col + dc
+                        
+                        while 0 <= next_row < ROWS and 0 <= next_col < COLS:
+                            if self.get_piece(next_row, next_col) != 0:
+                                break  # Napotkaliśmy inny pionek
+                                
+                            if (next_row, next_col) not in visited:
+                                # Próbujemy wykonać bicie i szukać kolejnych
+                                new_captured = captured_pieces + [capture_pos]
+                                new_visited = visited | {(next_row, next_col)}
+                                
+                                result, final_captured, final_visited = self._check_capture_path(
+                                    piece, next_row, next_col, dest_row, dest_col,
+                                    new_captured, new_visited)
+                                    
+                                if result:
+                                    return True, final_captured, final_visited
+                                    
+                            next_row += dr
+                            next_col += dc
+                        break  # Kończymy sprawdzanie tego kierunku po znalezieniu pionka
+                    
+                    new_row += dr
+                    new_col += dc
+            else:
+                # Dla zwykłego pionka - istniejąca logika
+                new_row = current_row + dr
+                new_col = current_col + dc
+                
+                if not (0 <= new_row < ROWS and 0 <= new_col < COLS):
+                    continue
+                    
+                mid_row = current_row + dr//2
+                mid_col = current_col + dc//2
+                
+                if self.get_piece(new_row, new_col) != 0:
+                    continue
+                
+                piece_to_capture = self.get_piece(mid_row, mid_col)
+                if (piece_to_capture == 0 or 
+                    piece_to_capture.color == piece.color or 
+                    (mid_row, mid_col) in captured_pieces):
+                    continue
+                    
+                new_captured = captured_pieces + [(mid_row, mid_col)]
+                new_visited = visited | {(new_row, new_col)}
+                
+                if (new_row, new_col) not in visited:
+                    result, final_captured, final_visited = self._check_capture_path(
+                        piece, new_row, new_col, dest_row, dest_col, new_captured, new_visited)
+                    if result:
+                        return True, final_captured, final_visited
+                        
         return False, captured_pieces, visited
 
+    def get_valid_moves(self, piece):
+        valid_moves = set()  # Używamy set() aby uniknąć duplikatów
+        
+        if piece.king:
+            # Sprawdź ruchy damki w każdym kierunku
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+            for dr, dc in directions:
+                current_row = piece.row + dr
+                current_col = piece.col + dc
+                
+                # Sprawdź zwykłe ruchy (bez bicia)
+                while (0 <= current_row < ROWS and 0 <= current_col < COLS and 
+                    self.get_piece(current_row, current_col) == 0 and
+                    not self.can_capture(piece)):
+                    valid_moves.add((current_row, current_col))
+                    current_row += dr
+                    current_col += dc
+        else:
+            # Dla zwykłego pionka
+            direction = -1 if piece.color == BLUE else 1
+            moves = [(direction, -1), (direction, 1)]
+            
+            # Sprawdź zwykłe ruchy (bez bicia)
+            for dr, dc in moves:
+                new_row = piece.row + dr
+                new_col = piece.col + dc
+                if (0 <= new_row < ROWS and 0 <= new_col < COLS and 
+                    self.get_piece(new_row, new_col) == 0 and
+                    not self.can_capture(piece)):
+                    valid_moves.add((new_row, new_col))
+        
+        # Sprawdź możliwe bicia (dla obu typów pionków)
+        self._add_capture_moves(piece, piece.row, piece.col, set(), valid_moves)
+        
+        return valid_moves
+
+    def _add_capture_moves(self, piece, row, col, captured, valid_moves):
+        if piece.king:
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        else:
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        
+        for dr, dc in directions:
+            current_row = row + dr
+            current_col = col + dc
+            
+            while 0 <= current_row < ROWS and 0 <= current_col < COLS:
+                current_piece = self.get_piece(current_row, current_col)
+                if current_piece == 0:
+                    if not piece.king:
+                        break
+                    current_row += dr
+                    current_col += dc
+                    continue
+                    
+                if current_piece.color == piece.color:
+                    break
+                    
+                # Znaleziono pionek przeciwnika
+                if (current_row, current_col) not in captured:
+                    next_row = current_row + dr
+                    next_col = current_col + dc
+                    
+                    while 0 <= next_row < ROWS and 0 <= next_col < COLS:
+                        if self.get_piece(next_row, next_col) != 0:
+                            break
+                        valid_moves.add((next_row, next_col))
+                        if not piece.king:
+                            break
+                        next_row += dr
+                        next_col += dc
+                break
+                
+                current_row += dr
+                current_col += dc
+
+    def draw(self, win):
+        self.draw_squares(win)
+        for row in range(ROWS):
+            for col in range(COLS):
+                piece = self.board[row][col]
+                if piece != 0:
+                    piece.draw(win)
+        
+    def highlight_moves(self, win, valid_moves):
+        for row, col in valid_moves:
+            x = col * SQUARE_SIZE
+            y = row * SQUARE_SIZE
+            pygame.draw.circle(win, (0, 255, 0), 
+                            (x + SQUARE_SIZE//2, y + SQUARE_SIZE//2), 
+                            15)  # Zielone kółka pokazujące możliwe ruchy
+            
     def move(self, piece, dest_row, dest_col):
         print(f"Attempting to move piece from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col})")
         valid, captured_pieces, visited = self.valid_move(piece, dest_row, dest_col)

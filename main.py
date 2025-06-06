@@ -17,11 +17,14 @@ def main():
     clock = pygame.time.Clock()
     board = Board()
     selected_piece = None
-    turn = BLUE  
+    turn = BLUE
+    valid_moves = set()  # Dodajemy zmienną do przechowywania możliwych ruchów
 
     while run:
         clock.tick(60)
         board.draw(WIN)
+        if selected_piece:
+            board.highlight_moves(WIN, valid_moves)  # Pokazujemy możliwe ruchy
         pygame.display.update()
 
         for event in pygame.event.get():
@@ -29,27 +32,22 @@ def main():
                 run = False
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-                print("Mouse clicked")
-                print(f' Pre selecteing: {selected_piece}')
                 pos = pygame.mouse.get_pos()
                 row, col = get_row_col_from_mouse(pos)
                 piece = board.get_piece(row, col)
-                print(f"Clicked on row: {row}, col: {col}, piece: {piece}")
+                
                 if selected_piece:
-                    print(f"Selected piece: {selected_piece}, trying to move to row: {row}, col: {col}")
-                    if board.move(selected_piece, row, col):
-                        selected_piece = None
-                        turn = BLUE if turn == RED else RED
+                    if (row, col) in valid_moves:  # Sprawdzamy czy ruch jest dozwolony
+                        if board.move(selected_piece, row, col):
+                            selected_piece = None
+                            valid_moves = set()  # Czyścimy możliwe ruchy
+                            turn = BLUE if turn == RED else RED
                     else:
                         selected_piece = None
+                        valid_moves = set()  # Czyścimy możliwe ruchy
                 else:
-                    print("Selecting piece")
                     if piece != 0 and piece.color == turn:
-                        print(f"Piece selected: {piece}")
                         selected_piece = piece
-                print(f"Selected piece: {selected_piece}")
-
-    pygame.quit()
-
+                        valid_moves = board.get_valid_moves(piece)  # Pobieramy możliwe ruchy
 if __name__ == "__main__":
     main()
