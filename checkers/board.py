@@ -47,6 +47,29 @@ class Board:
         return self.board[row][col]
 
     def can_capture(self, piece):
+
+        if piece.king:
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+            for dr, dc in directions:
+                current_row = piece.row + dr
+                current_col = piece.col + dc
+                found_piece = False
+                
+                while 0 <= current_row < ROWS and 0 <= current_col < COLS:
+                    current_piece = self.get_piece(current_row, current_col)
+                    if current_piece != 0:
+                        if current_piece.color == piece.color:
+                            break
+                        if found_piece:  # Już znaleźliśmy jeden pionek
+                            break
+                        found_piece = True
+                    elif found_piece:  # Znaleźliśmy pionek i puste pole za nim
+                        return True
+                    current_row += dr
+                    current_col += dc
+            return False
+
+        # Dla zwykłych pionków
         directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
         for dr, dc in directions:
             mid_row = piece.row + dr
@@ -57,6 +80,7 @@ class Board:
             if 0 <= end_row < ROWS and 0 <= end_col < COLS:
                 mid_piece = self.get_piece(mid_row, mid_col)
                 end_piece = self.get_piece(end_row, end_col)
+                # Usunięto sprawdzanie czy zbijany pionek jest damką
                 if mid_piece != 0 and mid_piece.color != piece.color and end_piece == 0:
                     return True
         return False
@@ -89,10 +113,71 @@ class Board:
                 result, captured, visited = self._check_capture_path(piece, piece.row, piece.col, dest_row, dest_col, [], set())
                 return result, captured, visited
 
+            # Damka moves
+        if piece.king:
+            # Musi się poruszać po przekątnej
+            if abs(row_diff) != abs(col_diff):
+                return False, [], set()
+
+            step_row = 1 if row_diff > 0 else -1
+            step_col = 1 if col_diff > 0 else -1
+            current_row = piece.row + step_row
+            current_col = piece.col + step_col
+            piece_to_capture = None
+            capture_pos = None
+
+            # Sprawdzanie ścieżki ruchu
+            while current_row != dest_row and current_col != dest_col:
+                current_piece = self.get_piece(current_row, current_col)
+                if current_piece != 0:
+                    # Jeśli już znaleźliśmy pionek do zbicia, to nie możemy przeskakiwać więcej
+                    if piece_to_capture:
+                        return False, [], set()
+                    # Nie możemy przeskakiwać własnych pionków
+                    if current_piece.color == piece.color:
+                        return False, [], set()
+                    piece_to_capture = current_piece
+                    capture_pos = (current_row, current_col)
+                current_row += step_row
+                current_col += step_col
+
+            # Jeśli znaleziono pionek do zbicia
+            if piece_to_capture:
+                # Sprawdź czy jest możliwe inne bicie
+                if self.can_capture(piece) and (capture_pos not in [(capture_pos[0], capture_pos[1])]):
+                    return False, [], set()
+                return True, [capture_pos], {(dest_row, dest_col)}
+
+            # Zwykły ruch - tylko jeśli nie ma możliwości bicia
+            if not self.can_capture(piece):
+                return True, [], {(dest_row, dest_col)}
+            return False, [], set()
         # Jeśli żaden warunek nie został spełniony
         return False, [], set()
 
     def _check_capture_path(self, piece, current_row, current_col, dest_row, dest_col, captured_pieces, visited):
+        
+        if piece.king:
+            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+            for dr, dc in directions:
+                current_row = piece.row + dr
+                current_col = piece.col + dc
+                found_piece = False
+                
+                while 0 <= current_row < ROWS and 0 <= current_col < COLS:
+                    current_piece = self.get_piece(current_row, current_col)
+                    if current_piece != 0:
+                        if current_piece.color == piece.color:
+                            break
+                        if found_piece:  # Już znaleźliśmy jeden pionek
+                            break
+                        found_piece = True
+                    elif found_piece:  # Znaleźliśmy pionek i puste pole za nim
+                        return True
+                    current_row += dr
+                    current_col += dc
+            return False
+        
         # Jeśli dotarliśmy do celu
         if current_row == dest_row and current_col == dest_col:
             return len(captured_pieces) > 0, captured_pieces, visited
@@ -117,8 +202,7 @@ class Board:
             piece_to_capture = self.get_piece(mid_row, mid_col)
             if (piece_to_capture == 0 or 
                 piece_to_capture.color == piece.color or 
-                (piece_to_capture.king and not piece.king) or
-                (mid_row, mid_col) in captured_pieces):
+                (mid_row, mid_col) in captured_pieces):  # Usunięto warunek sprawdzający czy zbijany pionek jest damką
                 continue
                 
             new_captured = captured_pieces + [(mid_row, mid_col)]
@@ -146,10 +230,23 @@ class Board:
             self.board[dest_row][dest_col] = piece
             piece.move(dest_row, dest_col)
 
-            # Promocja na damkę
-            if (piece.color == RED and dest_row == 0) or (piece.color == BLUE and dest_row == ROWS - 1):
-                piece.make_king()
-
+            # Promocja na damkę według zasad warcabów polskich:
+            # - Czerwony pionek dociera do rzędu 0
+            # - Niebieski pionek dociera do rzędu 9 (ROWS-1)
+            # - Pionek kończy ruch na linii promocji
+            if not piece.king:  # Sprawdzamy tylko dla zwykłych pionków
+                if (piece.color == BLUE and dest_row == 0) or (piece.color == RED and dest_row == ROWS - 1):
+                    piece.make_king()
+                    print(f"Piece promoted to king at position ({dest_row}, {dest_col})")
+                    # Po promocji na damkę, nie można już wykonać kolejnego bicia w tym samym ruchu
+                    return True
+                
+            # Sprawdź czy gra się zakończyła
+            winner = self.get_winner()
+            if winner is not None:
+                print(f"Gra zakończona! Wygrał {'CZERWONY' if winner == RED else 'NIEBIESKI'}")
+                return True
+            
             # Sprawdzenie możliwości kolejnego bicia
             if self.can_capture(piece):
                 print("Możliwe kolejne bicie. Gracz musi kontynuować.")
@@ -162,83 +259,59 @@ class Board:
         for piece in pieces:
             self.board[piece.row][piece.col] = 0
 
-    def get_valid_moves(self, piece):
-        moves = {}
-        left = piece.col - 1
-        right = piece.col + 1
-        row = piece.row
+    def can_move(self, piece):
+        # Sprawdź możliwość bicia
+        if self.can_capture(piece):
+            return True
+            
+        # Sprawdź możliwe zwykłe ruchy
+        if not piece.king:
+            # Dla zwykłych pionków sprawdź ruchy do przodu
+            direction = -1 if piece.color == BLUE else 1
+            moves = [(direction, -1), (direction, 1)]
+        else:
+            # Dla damki sprawdź wszystkie kierunki
+            moves = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        
+        # Sprawdź każdy możliwy ruch
+        for dr, dc in moves:
+            new_row = piece.row + dr
+            new_col = piece.col + dc
+            if 0 <= new_row < ROWS and 0 <= new_col < COLS:
+                if self.get_piece(new_row, new_col) == 0:
+                    return True
+                    
+        return False
 
-        if piece.color == RED or piece.king:
-            moves.update(self._traverse_left(row - 1, max(row - 3, -1), -1, piece.color, left))
-            moves.update(self._traverse_right(row - 1, max(row - 3, -1), -1, piece.color, right))
-        if piece.color == BLUE or piece.king:
-            moves.update(self._traverse_left(row + 1, min(row + 3, ROWS), 1, piece.color, left))
-            moves.update(self._traverse_right(row + 1, min(row + 3, ROWS), 1, piece.color, right))
+    def get_winner(self):
+        red_pieces = 0
+        blue_pieces = 0
+        red_can_move = False
+        blue_can_move = False
 
-        return moves
+        # Sprawdź wszystkie pionki na planszy
+        for row in range(ROWS):
+            for col in range(COLS):
+                piece = self.get_piece(row, col)
+                if piece != 0:
+                    # Zlicz pionki każdego koloru i sprawdź możliwość ruchu
+                    if piece.color == RED:
+                        red_pieces += 1
+                        if not red_can_move and self.can_move(piece):
+                            red_can_move = True
+                    else:  # BLUE
+                        blue_pieces += 1
+                        if not blue_can_move and self.can_move(piece):
+                            blue_can_move = True
 
-    def _traverse_left(self, start, stop, step, color, left, skipped=[]):
-        moves = {}
-        last = []
-        for r in range(start, stop, step):
-            if left < 0:
-                break
-
-            current = self.board[r][left]
-            if current == 0:
-                if skipped and not last:
-                    break
-                elif skipped:
-                    moves[(r, left)] = last + skipped
-                else:
-                    moves[(r, left)] = last
-
-                if last:
-                    if step == -1:
-                        row = max(r - 3, 0)
-                    else:
-                        row = min(r + 3, ROWS)
-                    moves.update(self._traverse_left(r + step, row, step, color, left - 1, skipped=last))
-                    moves.update(self._traverse_right(r + step, row, step, color, left + 1, skipped=last))
-                break
-            elif current.color == color:
-                break
-            else:
-                last = [current]
-
-            left -= 1
-
-        return moves
-
-    def _traverse_right(self, start, stop, step, color, right, skipped=[]):
-        moves = {}
-        last = []
-        for r in range(start, stop, step):
-            if right >= COLS:
-                break
-
-            current = self.board[r][right]
-            if current == 0:
-                if skipped and not last:
-                    break
-                elif skipped:
-                    moves[(r, right)] = last + skipped
-                else:
-                    moves[(r, right)] = last
-
-                if last:
-                    if step == -1:
-                        row = max(r - 3, 0)
-                    else:
-                        row = min(r + 3, ROWS)
-                    moves.update(self._traverse_left(r + step, row, step, color, right - 1, skipped=last))
-                    moves.update(self._traverse_right(r + step, row, step, color, right + 1, skipped=last))
-                break
-            elif current.color == color:
-                break
-            else:
-                last = [current]
-
-            right += 1
-
-        return moves
+        # Sprawdź warunki końca gry
+        if red_pieces == 0:
+            return BLUE  # Niebieski wygrał
+        elif blue_pieces == 0:
+            return RED   # Czerwony wygrał
+        elif not red_can_move:
+            return BLUE  # Czerwony jest zablokowany, niebieski wygrał
+        elif not blue_can_move:
+            return RED   # Niebieski jest zablokowany, czerwony wygrał
+        else:
+            return None  # Gra trwa nadal
