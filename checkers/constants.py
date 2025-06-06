@@ -1,0 +1,12 @@
+# constants.py
+
+WIDTH, HEIGHT = 800, 800
+ROWS, COLS = 10, 10
+SQUARE_SIZE = WIDTH // COLS
+
+# RGB
+WHITE = (255, 255, 255)
+GREY = (128, 128, 128)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
