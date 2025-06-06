@@ -49,5 +49,6 @@ def main():
                     if piece != 0 and piece.color == turn:
                         selected_piece = piece
                         valid_moves = board.get_valid_moves(piece)  # Pobieramy możliwe ruchy
+                        
 if __name__ == "__main__":
     main()
