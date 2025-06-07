@@ -10,6 +10,25 @@ pygame.init()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption('Polish Draughts')
 
+# Menu button properties
+BUTTON_WIDTH = 300
+BUTTON_HEIGHT = 60
+BUTTON_SPACING = 20
+BUTTON_COLOR = (100, 100, 100)
+BUTTON_HOVER_COLOR = (150, 150, 150)
+TEXT_COLOR = (255, 255, 255)
+FONT = pygame.font.SysFont('arial', 30)
+
+def draw_menu(win, buttons):
+    win.fill((0, 0, 0))  # Black background
+    for button in buttons:
+        color = BUTTON_HOVER_COLOR if button['hover'] else BUTTON_COLOR
+        pygame.draw.rect(win, color, button['rect'])
+        text = FONT.render(button['text'], True, TEXT_COLOR)
+        text_rect = text.get_rect(center=button['rect'].center)
+        win.blit(text, text_rect)
+    pygame.display.update()
+
 def get_row_col_from_mouse(pos):
     x, y = pos
     row = y // SQUARE_SIZE
@@ -17,15 +36,42 @@ def get_row_col_from_mouse(pos):
     return row, col
 
 async def main():
+    # Menu setup
+    buttons = [
+        {'text': 'Player vs Player', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 200, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'pvp'},
+        {'text': 'Player vs MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 280, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'mcts'},
+        {'text': 'Player vs AI 2 (Placeholder)', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai2'},
+        {'text': 'Player vs AI 3 (Placeholder)', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai3'},
+    ]
+    mode = None
+
+    # Menu loop
+    while mode is None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+            if event.type == pygame.MOUSEMOTION:
+                for button in buttons:
+                    button['hover'] = button['rect'].collidepoint(event.pos)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                for button in buttons:
+                    if button['rect'].collidepoint(event.pos):
+                        mode = button['mode']
+                        break
+        draw_menu(WIN, buttons)
+        await asyncio.sleep(0.016)  # ~60 FPS
+
+    # Game setup
     run = True
     clock = pygame.time.Clock()
     board = Board()
     selected_piece = None
     turn = BLUE  # Human player starts as BLUE
     valid_moves = set()
-    ai_player = RED  # AI controls RED
+    ai_player = RED if mode != 'pvp' else None  # AI controls RED if not PvP
     FPS = 60
-    ai_timeout = 3  # Reduced timeout to 3 seconds
+    ai_timeout = 3  # Timeout for AI moves
 
     while run:
         clock.tick(FPS)
@@ -42,12 +88,18 @@ async def main():
             run = False
             break
 
-        if turn == ai_player:
+        if ai_player and turn == ai_player:
             print(f"AI ({'RED' if ai_player == RED else 'BLUE'}) turn")
             start_time = time.time()
             try:
-                mcts = MCTS(board, ai_player, iterations=30)  # Further reduced for responsiveness
-                move = mcts.search()
+                if mode == 'mcts':
+                    mcts = MCTS(board, ai_player, iterations=30)
+                    move = mcts.search()
+                else:
+                    print(f"{mode} not implemented yet")
+                    run = False
+                    break
+
                 if move:
                     piece, dest_row, dest_col = move
                     new_piece = board.get_piece(piece.row, piece.col)
@@ -57,7 +109,6 @@ async def main():
                         break
                     result = board.move(new_piece, dest_row, dest_col)
                     print(f"AI moved from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col}), result: {result}")
-                    # Highlight AI move briefly
                     board.highlight_moves(WIN, {(dest_row, dest_col)})
                     pygame.display.update()
                     await asyncio.sleep(0.5)
@@ -68,7 +119,6 @@ async def main():
                         print("AI must continue capturing")
                 else:
                     print("AI found no valid moves")
-                    # Check if AI has any moves
                     has_moves = False
                     for row in range(ROWS):
                         for col in range(COLS):
@@ -94,7 +144,7 @@ async def main():
                 run = False
                 break
         else:
-            # Human player's turn
+            # Human player's turn (BLUE or RED)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     run = False
@@ -107,14 +157,14 @@ async def main():
                     if selected_piece:
                         if (row, col) in valid_moves:
                             result = board.move(selected_piece, row, col)
-                            print(f"Human moved from ({selected_piece.row}, {selected_piece.col}) to ({row}, {col}), result: {result}")
+                            print(f"Player {'BLUE' if turn == BLUE else 'RED'} moved from ({selected_piece.row}, {selected_piece.col}) to ({row}, {col}), result: {result}")
                             if result == True or result is None:
                                 selected_piece = None
                                 valid_moves = set()
-                                turn = ai_player
+                                turn = RED if turn == BLUE else BLUE
                             elif result == "CONTINUE":
                                 valid_moves = board.get_valid_moves(selected_piece)
-                                print("Human must continue capturing")
+                                print(f"Player {'BLUE' if turn == BLUE else 'RED'} must continue capturing")
                         else:
                             selected_piece = None
                             valid_moves = set()
@@ -123,7 +173,7 @@ async def main():
                         if piece != 0 and piece.color == turn:
                             selected_piece = piece
                             valid_moves = board.get_valid_moves(piece)
-                            print(f"Human selected piece at ({piece.row}, {piece.col})")
+                            print(f"Player {'BLUE' if turn == BLUE else 'RED'} selected piece at ({piece.row}, {piece.col})")
         
         await asyncio.sleep(1.0 / FPS)
 
