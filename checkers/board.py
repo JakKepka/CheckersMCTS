@@ -18,9 +18,9 @@ class Board:
             self.board.append([])
             for col in range(COLS):
                 if row < 4 and (row + col) % 2 == 1:
-                    self.board[row].append(Piece(row, col, RED))
+                    self.board[row].append(Piece(row, col, BLUE))  # BLUE starts at rows 0–3
                 elif row > 5 and (row + col) % 2 == 1:
-                    self.board[row].append(Piece(row, col, BLUE))
+                    self.board[row].append(Piece(row, col, RED))   # RED starts at rows 6–9
                 else:
                     self.board[row].append(0)
 
@@ -55,7 +55,7 @@ class Board:
             end_row = piece.row + 2 * dr
             end_col = piece.col + 2 * dc
             if (0 <= mid_row < ROWS and 0 <= mid_col < COLS and
-                0 <= end_row < ROWS and ROWS and 0 <= end_col < COLS):
+                0 <= end_row < ROWS and 0 <= end_col < COLS):
                 mid_piece = self.get_piece(mid_row, mid_col)
                 end_piece = self.get_piece(end_row, end_col)
                 if mid_piece != 0 and mid_piece.color != piece.color and end_piece == 0:
@@ -182,8 +182,8 @@ class Board:
                     else:
                         break
         else:
-            # Restrict non-king moves: RED moves down (dr=1), BLUE moves up (dr=-1)
-            directions = [(1, -1), (1, 1)] if piece.color == RED else [(-1, -1), (-1, 1)]
+            # Restrict non-king moves: RED moves up (dr=-1), BLUE moves down (dr=1)
+            directions = [(-1, -1), (-1, 1)] if piece.color == RED else [(1, -1), (1, 1)]
             for dr, dc in directions:
                 row, col = piece.row + dr, piece.col + dc
                 if 0 <= row < ROWS and 0 <= col < COLS and self.get_piece(row, col) == 0:
@@ -315,7 +315,7 @@ class Board:
                 piece.move(dest_row, dest_col)
 
             if not piece.king:
-                if (piece.color == RED and dest_row == 0) or (piece.color == BLUE and dest_row == ROWS - 1):
+                if (piece.color == BLUE and dest_row == ROWS - 1) or (piece.color == RED and dest_row == 0):
                     piece.make_king()
                     print(f"Piece promoted to king at position ({dest_row}, {dest_col})")
 
