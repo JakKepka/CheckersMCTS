@@ -6,6 +6,7 @@ from checkers.board import Board
 from checkers.constants import WIDTH, HEIGHT, SQUARE_SIZE, RED, BLUE, ROWS, COLS
 from mcts.mcts import MCTS
 from mcts.hueristics import MCTSHEURISTIC
+from mcts.progressive_widening import MCTSPROGRESSIVE
 
 pygame.init()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -42,7 +43,7 @@ async def main():
         {'text': 'Player vs Player', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 200, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'pvp'},
         {'text': 'Player vs MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 280, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'mcts'},
         {'text': 'Player vs Heuristic MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai2'},
-        {'text': 'Player vs AI 3 (Placeholder)', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai3'},
+        {'text': 'Player vs Progressive MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai3'},
     ]
     mode = None
 
@@ -99,6 +100,9 @@ async def main():
                 elif mode == 'ai2':
                     mcts = MCTSHEURISTIC(board, ai_player, iterations=30)
                     move = mcts.search()
+                elif mode == 'ai3':
+                    mcts = MCTSPROGRESSIVE(board, ai_player, iterations=30)
+                    move = mcts.search()
                 else:
                     print(f"{mode} not implemented yet")
                     run = False
@@ -135,9 +139,7 @@ async def main():
                     else:
                         print("MCTS failed to find moves despite available options")
                         run = False
-                # if time.time() - start_time > ai_timeout:
-                #     print("AI move timed out")
-                #     run = False
+
             except Exception as e:
                 print(f"AI error: {e}")
                 run = False
