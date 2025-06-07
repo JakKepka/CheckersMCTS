@@ -5,6 +5,7 @@ import time
 from checkers.board import Board
 from checkers.constants import WIDTH, HEIGHT, SQUARE_SIZE, RED, BLUE, ROWS, COLS
 from mcts.mcts import MCTS
+from mcts.hueristics import MCTSHEURISTIC
 
 pygame.init()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -40,7 +41,7 @@ async def main():
     buttons = [
         {'text': 'Player vs Player', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 200, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'pvp'},
         {'text': 'Player vs MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 280, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'mcts'},
-        {'text': 'Player vs AI 2 (Placeholder)', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai2'},
+        {'text': 'Player vs Heuristic MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai2'},
         {'text': 'Player vs AI 3 (Placeholder)', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai3'},
     ]
     mode = None
@@ -95,6 +96,9 @@ async def main():
                 if mode == 'mcts':
                     mcts = MCTS(board, ai_player, iterations=30)
                     move = mcts.search()
+                elif mode == 'ai2':
+                    mcts = MCTSHEURISTIC(board, ai_player, iterations=30)
+                    move = mcts.search()
                 else:
                     print(f"{mode} not implemented yet")
                     run = False
@@ -108,15 +112,12 @@ async def main():
                         run = False
                         break
                     result = board.move(new_piece, dest_row, dest_col)
-                    print(f"AI moved from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col}), result: {result}")
+                    print(f"AI moved from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col})")
+                    board.draw(WIN)
                     board.highlight_moves(WIN, {(dest_row, dest_col)})
                     pygame.display.update()
                     await asyncio.sleep(0.5)
-                    board.draw(WIN)
-                    if result != "CONTINUE":
-                        turn = BLUE
-                    else:
-                        print("AI must continue capturing")
+                    turn = BLUE
                 else:
                     print("AI found no valid moves")
                     has_moves = False
@@ -134,15 +135,12 @@ async def main():
                     else:
                         print("MCTS failed to find moves despite available options")
                         run = False
-                    break
                 # if time.time() - start_time > ai_timeout:
                 #     print("AI move timed out")
                 #     run = False
-                #     break
             except Exception as e:
                 print(f"AI error: {e}")
                 run = False
-                break
         else:
             # Human player's turn (BLUE or RED)
             for event in pygame.event.get():
@@ -157,14 +155,10 @@ async def main():
                     if selected_piece:
                         if (row, col) in valid_moves:
                             result = board.move(selected_piece, row, col)
-                            print(f"Player {'BLUE' if turn == BLUE else 'RED'} moved from ({selected_piece.row}, {selected_piece.col}) to ({row}, {col}), result: {result}")
-                            if result == True or result is None:
-                                selected_piece = None
-                                valid_moves = set()
-                                turn = RED if turn == BLUE else BLUE
-                            elif result == "CONTINUE":
-                                valid_moves = board.get_valid_moves(selected_piece)
-                                print(f"Player {'BLUE' if turn == BLUE else 'RED'} must continue capturing")
+                            print(f"Player {'BLUE' if turn == BLUE else 'RED'} moved from ({selected_piece.row}, {selected_piece.col}) to ({row}, {col})")
+                            selected_piece = None
+                            valid_moves = set()
+                            turn = RED if turn == BLUE else BLUE
                         else:
                             selected_piece = None
                             valid_moves = set()
