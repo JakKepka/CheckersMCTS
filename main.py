@@ -69,8 +69,6 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
 
         if mode == 'aivai':
             current_ai = ai_blue if turn == BLUE else ai_red
-            print(f"AI ({'BLUE' if turn == BLUE else 'RED'}) turn")
-            start_time = time.time()
             try:
                 mcts = current_ai(copy.deepcopy(board), turn, iterations=iterations)
                 move = mcts.search()
@@ -78,15 +76,12 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                     piece, dest_row, dest_col = move
                     new_piece = board.get_piece(piece.row, piece.col)
                     if new_piece == 0 or new_piece.color != turn:
-                        print(f"AI selected invalid piece at ({piece.row}, {piece.col})")
                         stop_event.set()
                         break
                     result = board.move(new_piece, dest_row, dest_col)
-                    print(f"AI ({'BLUE' if turn == BLUE else 'RED'}) moved from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col})")
                     move_queue.put((piece.row, piece.col, dest_row, dest_col))
                     turn = RED if turn == BLUE else BLUE
                 else:
-                    print(f"AI ({'BLUE' if turn == BLUE else 'RED'}) found no valid moves")
                     has_moves = False
                     for row in range(ROWS):
                         for col in range(COLS):
@@ -97,18 +92,13 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                         if has_moves:
                             break
                     if not has_moves:
-                        print(f"AI ({'BLUE' if turn == BLUE else 'RED'}) has no moves, {'RED' if turn == BLUE else 'BLUE'} wins")
                         stop_event.set()
                     else:
-                        print("MCTS failed to find moves despite available options")
                         stop_event.set()
 
             except Exception as e:
-                print(f"AI error: {e}")
                 stop_event.set()
         elif ai_player and turn == ai_player:
-            print(f"AI ({'RED' if ai_player == RED else 'BLUE'}) turn")
-            start_time = time.time()
             try:
                 if mode == 'mcts':
                     mcts = MCTS(copy.deepcopy(board), ai_player, iterations=iterations)
@@ -119,7 +109,6 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                 elif mode == 'nested':
                     mcts = MCTSNESTED(copy.deepcopy(board), ai_player, iterations=iterations)
                 else:
-                    print(f"{mode} not implemented yet")
                     stop_event.set()
                     break
                 move = mcts.search()
@@ -127,15 +116,12 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                     piece, dest_row, dest_col = move
                     new_piece = board.get_piece(piece.row, piece.col)
                     if new_piece == 0 or new_piece.color != ai_player:
-                        print(f"AI selected invalid piece at ({piece.row}, {piece.col})")
                         stop_event.set()
                         break
                     result = board.move(new_piece, dest_row, dest_col)
-                    print(f"AI moved from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col})")
                     move_queue.put((piece.row, piece.col, dest_row, dest_col))
                     turn = BLUE
                 else:
-                    print("AI found no valid moves")
                     has_moves = False
                     for row in range(ROWS):
                         for col in range(COLS):
@@ -146,14 +132,11 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                         if has_moves:
                             break
                     if not has_moves:
-                        print("AI has no moves, human wins")
                         stop_event.set()
                     else:
-                        print("MCTS failed to find moves despite available options")
                         stop_event.set()
 
             except Exception as e:
-                print(f"AI error: {e}")
                 stop_event.set()
         elif mode != 'aivai':
             time.sleep(0.01)
@@ -235,6 +218,23 @@ async def main():
     turn = BLUE
     valid_moves = set()
     ai_player = RED if mode != 'pvp' else None
+
+    # Print player types at the start
+    if mode == 'pvp':
+        print("BLUE: Human, RED: Human")
+    elif mode == 'aivai':
+        red_ai_name = next(opt['text'] for opt in ai_options if opt['ai_class'] == ai_red)
+        blue_ai_name = next(opt['text'] for opt in ai_options if opt['ai_class'] == ai_blue)
+        print(f"BLUE: {blue_ai_name}, RED: {red_ai_name}")
+    else:
+        ai_name = {
+            'mcts': 'MCTS',
+            'ai2': 'Heuristic MCTS',
+            'ai3': 'Progressive MCTS',
+            'nested': 'Nested MCTS'
+        }[mode]
+        print(f"BLUE: Human, RED: {ai_name}")
+
     FPS = 60
     iterations = 30 if mode != 'aivai' else 15
     move_queue = queue.Queue()
@@ -245,7 +245,6 @@ async def main():
         game_thread.daemon = True
         game_thread.start()
     else:
-        # For Emscripten, run game logic in async loop
         async def async_game_logic():
             await game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event)
         asyncio.create_task(async_game_logic())
@@ -281,7 +280,6 @@ async def main():
                     if selected_piece:
                         if (row, col) in valid_moves:
                             result = board.move(selected_piece, row, col)
-                            print(f"Player {'BLUE' if turn == BLUE else 'RED'} moved from ({selected_piece.row}, {selected_piece.col}) to ({row}, {col})")
                             move_queue.put((selected_piece.row, selected_piece.col, row, col))
                             selected_piece = None
                             valid_moves = set()
@@ -289,12 +287,10 @@ async def main():
                         else:
                             selected_piece = None
                             valid_moves = set()
-                            print("Invalid move, piece deselected")
                     else:
                         if piece != 0 and piece.color == turn:
                             selected_piece = piece
                             valid_moves = board.get_valid_moves(piece)
-                            print(f"Player {'BLUE' if turn == BLUE else 'RED'} selected piece at ({piece.row}, {piece.col})")
         else:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -304,7 +300,6 @@ async def main():
 
         await asyncio.sleep(1.0 / FPS)
 
-    print("Game ended")
     if platform.system() != "Emscripten":
         game_thread.join(timeout=1)
     pygame.quit()

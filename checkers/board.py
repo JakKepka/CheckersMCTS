@@ -285,7 +285,6 @@ class Board:
                                15)
 
     def move(self, piece, dest_row, dest_col):
-        print(f"Attempting to move piece from ({piece.row}, {piece.col}) to ({dest_row}, {dest_col})")
         valid, captured_pieces, visited = self.valid_move(piece, dest_row, dest_col)
         
         if valid:
@@ -295,7 +294,6 @@ class Board:
                 if piece_to_remove != 0:
                     pieces_to_remove.append(piece_to_remove)
             
-            print(f"Removing captured pieces: {[(p.row, p.col) for p in pieces_to_remove]}")
             self.remove(pieces_to_remove)
 
             # Move through the capture path if it's a capture move
@@ -317,14 +315,9 @@ class Board:
             if not piece.king:
                 if (piece.color == BLUE and dest_row == ROWS - 1) or (piece.color == RED and dest_row == 0):
                     piece.make_king()
-                    print(f"Piece promoted to king at position ({dest_row}, {dest_col})")
-
-            winner = self.get_winner()
-            if winner is not None:
-                print(f"Gra zakończona! Wygrał {'RED' if winner == RED else 'BLUE'}")
-                return True
 
             return True  # Turn ends after move
+        return False
 
     def remove(self, pieces):
         for piece in pieces:
