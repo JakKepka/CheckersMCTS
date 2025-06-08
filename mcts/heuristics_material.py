@@ -29,15 +29,16 @@ class Node:
             return float('inf')
         return (self.wins / self.visits) + math.sqrt(2 * math.log(parent_visits) / self.visits)
 
-class MCTSHEURISTIC:
+class MCTSMaterialHeuristic:
     def __init__(self, board, player, iterations=30):
         self.root_board = board
         self.player = player
         self.opponent = BLUE if player == RED else RED
         self.iterations = iterations
-        self.center_weight = 0.3  # Weight for center heuristic
+        self.material_weight = 0.5  # Weight for material heuristic
         self.sigmoid_k = 1.0  # Sigmoid steepness for normalization
-        self.center_squares = [(4, 4), (4, 5), (5, 4), (5, 5)]  # 10x10 board centers
+        self.pawn_value = 1.0  # Value of a regular pawn
+        self.king_value = 10.0  # Very high value for a king
 
     def search(self):
         root = Node(copy.deepcopy(self.root_board), player=self.player)
@@ -150,31 +151,28 @@ class MCTSHEURISTIC:
         return self._evaluate_board(current_board)
 
     def _evaluate_board(self, board):
-        """Evaluate board using central position heuristic."""
-        player_center_score = 0.0
-        opponent_center_score = 0.0
+        """Evaluate board using material advantage heuristic, with high value for kings."""
+        player_material = 0.0
+        opponent_material = 0.0
 
         for row in range(ROWS):
             for col in range(COLS):
                 piece = board.get_piece(row, col)
                 if piece != 0:
-                    min_distance = min(
-                        abs(row - cr) + abs(col - cc) for cr, cc in self.center_squares
-                    )
-                    center_value = 1.0 / max(min_distance, 1)  # Avoid division by zero
+                    value = self.king_value if piece.king else self.pawn_value
                     if piece.color == self.player:
-                        player_center_score += center_value
+                        player_material += value
                     else:
-                        opponent_center_score += center_value
+                        opponent_material += value
 
-        # Central position heuristic: sum(1/d) for player - sum(1/d) for opponent
-        center_score = player_center_score - opponent_center_score
-        # Normalize center score (max ~20 pieces, min distance=1, max 1/d=1)
-        center_max = 20
-        center_normalized = center_score / center_max if center_max != 0 else 0.0
+        # Material heuristic: (player_pawns + 10*player_kings) - (opponent_pawns + 10*opponent_kings)
+        material_score = player_material - opponent_material
+        # Normalize material score (max ~20 pawns + 20 kings*10 = 220 per player, total diff ~440)
+        material_max = 440.0
+        material_normalized = material_score / material_max if material_max != 0 else 0.0
 
         # Apply sigmoid to map to [0, 1]
-        score = 1.0 / (1.0 + math.exp(-self.sigmoid_k * self.center_weight * center_normalized))
+        score = 1.0 / (1.0 + math.exp(-self.sigmoid_k * self.material_weight * material_normalized))
         return score
 
     def _backpropagate(self, node, result):

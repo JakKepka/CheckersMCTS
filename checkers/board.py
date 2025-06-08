@@ -58,7 +58,8 @@ class Board:
                 0 <= end_row < ROWS and 0 <= end_col < COLS):
                 mid_piece = self.get_piece(mid_row, mid_col)
                 end_piece = self.get_piece(end_row, end_col)
-                if mid_piece != 0 and mid_piece.color != piece.color and end_piece == 0:
+                if (mid_piece != 0 and mid_piece.color != piece.color and 
+                    not mid_piece.king and end_piece == 0):  # Regular pawn cannot capture king
                     return True
         return False
 
@@ -144,6 +145,7 @@ class Board:
                 piece_to_capture = self.get_piece(mid_row, mid_col)
                 if (piece_to_capture == 0 or 
                     piece_to_capture.color == piece.color or 
+                    piece_to_capture.king or  # Regular pawn cannot capture king
                     (mid_row, mid_col) in captured_pieces):
                     continue
                 new_captured = captured_pieces + [(mid_row, mid_col)]
@@ -224,7 +226,8 @@ class Board:
                 jump_r, jump_c = row + 2 * dr, col + 2 * dc
                 if 0 <= mid_r < ROWS and 0 <= mid_c < COLS and 0 <= jump_r < ROWS and 0 <= jump_c < COLS:
                     mid = self.get_piece(mid_r, mid_c)
-                    if mid != 0 and mid.color != piece.color and (mid_r, mid_c) not in captured:
+                    if (mid != 0 and mid.color != piece.color and not mid.king and  # Regular pawn cannot capture king
+                        (mid_r, mid_c) not in captured):
                         if self.get_piece(jump_r, jump_c) == 0 and (jump_r, jump_c) not in visited:
                             new_captured = captured | {(mid_r, mid_c)}
                             new_visited = visited | {(jump_r, jump_c)}
@@ -265,7 +268,8 @@ class Board:
                 mid_col = col + dc
                 if 0 <= next_row < ROWS and 0 <= next_col < COLS and self.get_piece(next_row, next_col) == 0:
                     piece_to_capture = self.get_piece(mid_row, mid_col)
-                    if piece_to_capture != 0 and piece_to_capture.color != piece.color and (mid_row, mid_col) not in captured:
+                    if (piece_to_capture != 0 and piece_to_capture.color != piece.color and 
+                        not piece_to_capture.king and (mid_row, mid_col) not in captured):  # Regular pawn cannot capture king
                         yield True
 
     def draw(self, win):

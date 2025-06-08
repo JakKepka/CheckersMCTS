@@ -5,12 +5,16 @@ import time
 import threading
 import queue
 import copy
+import logging
 from checkers.board import Board
 from checkers.constants import WIDTH, HEIGHT, SQUARE_SIZE, RED, BLUE, ROWS, COLS
 from mcts.mcts import MCTS
 from mcts.hueristics import MCTSHEURISTIC
 from mcts.progressive_widening import MCTSPROGRESSIVE
-from mcts.nuct import MCTSNESTED
+from mcts.heuristics_material import MCTSMaterialHeuristic
+
+# Set up logging
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 pygame.init()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -28,7 +32,7 @@ FONT = pygame.font.SysFont('arial', 30)
 def draw_menu(win, buttons):
     win.fill((0, 0, 0))
     for button in buttons:
-        color = BUTTON_HOVER_COLOR if button['hover'] else BUTTON_COLOR
+        color = button['hover'] and BUTTON_HOVER_COLOR or BUTTON_COLOR
         pygame.draw.rect(win, color, button['rect'])
         text = FONT.render(button['text'], True, TEXT_COLOR)
         text_rect = text.get_rect(center=button['rect'].center)
@@ -36,12 +40,12 @@ def draw_menu(win, buttons):
     pygame.display.update()
 
 def draw_ai_selection_menu(win, buttons, title):
-    win.fill((0, 0, 0))
+    win.fill((0, 0,0, 0))
     title_text = FONT.render(title, True, TEXT_COLOR)
     title_rect = title_text.get_rect(center=(WIDTH//2, 100))
     win.blit(title_text, title_rect)
     for button in buttons:
-        color = BUTTON_HOVER_COLOR if button['hover'] else BUTTON_COLOR
+        color = button['hover'] and BUTTON_HOVER_COLOR or BUTTON_COLOR
         pygame.draw.rect(win, color, button['rect'])
         text = FONT.render(button['text'], True, TEXT_COLOR)
         text_rect = text.get_rect(center=button['rect'].center)
@@ -54,7 +58,7 @@ def draw_game_count_menu(win, buttons):
     title_rect = title_text.get_rect(center=(WIDTH//2, 100))
     win.blit(title_text, title_rect)
     for button in buttons:
-        color = BUTTON_HOVER_COLOR if button['hover'] else BUTTON_COLOR
+        color = button['hover'] and BUTTON_HOVER_COLOR or BUTTON_COLOR
         pygame.draw.rect(win, color, button['rect'])
         text = FONT.render(button['text'], True, TEXT_COLOR)
         text_rect = text.get_rect(center=button['rect'].center)
@@ -89,6 +93,7 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, 
     while not stop_event.is_set():
         winner = board.get_winner()
         if winner is not None:
+            logging.debug(f"Game ended with winner: {'RED' if winner == RED else 'BLUE'}")
             win_queue.put(winner)
             stop_event.set()
             break
@@ -102,9 +107,11 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, 
                     piece, dest_row, dest_col = move
                     new_piece = board.get_piece(piece.row, piece.col)
                     if new_piece == 0 or new_piece.color != turn:
+                        logging.error(f"Invalid AI move: {move} for player {'BLUE' if turn == BLUE else 'RED'}")
                         stop_event.set()
                         break
                     result = board.move(new_piece, dest_row, dest_col)
+                    logging.debug(f"AI move: {piece.row},{piece.col} to {dest_row},{dest_col}")
                     move_queue.put((piece.row, piece.col, dest_row, dest_col))
                     turn = RED if turn == BLUE else BLUE
                 else:
@@ -118,11 +125,15 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, 
                         if has_moves:
                             break
                     if not has_moves:
+                        logging.debug(f"No valid moves for {'BLUE' if turn == BLUE else 'RED'}")
+                        win_queue.put(BLUE if turn == RED else RED)  # Opponent wins
                         stop_event.set()
                     else:
+                        logging.error("AI returned None but valid moves exist")
                         stop_event.set()
 
-            except Exception:
+            except Exception as e:
+                logging.error(f"AI exception: {str(e)}")
                 stop_event.set()
         elif ai_player and turn == ai_player:
             try:
@@ -132,9 +143,10 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, 
                     mcts = MCTSHEURISTIC(copy.deepcopy(board), ai_player, iterations=iterations)
                 elif mode == 'ai3':
                     mcts = MCTSPROGRESSIVE(copy.deepcopy(board), ai_player, iterations=iterations)
-                elif mode == 'nested':
-                    mcts = MCTSNESTED(copy.deepcopy(board), ai_player, iterations=iterations)
+                elif mode == 'material':
+                    mcts = MCTSMaterialHeuristic(copy.deepcopy(board), ai_player, iterations=iterations)
                 else:
+                    logging.error(f"Invalid mode: {mode}")
                     stop_event.set()
                     break
                 move = mcts.search()
@@ -142,9 +154,11 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, 
                     piece, dest_row, dest_col = move
                     new_piece = board.get_piece(piece.row, piece.col)
                     if new_piece == 0 or new_piece.color != ai_player:
+                        logging.error(f"Invalid AI move: {move} for player {'RED' if ai_player == RED else 'BLUE'}")
                         stop_event.set()
                         break
                     result = board.move(new_piece, dest_row, dest_col)
+                    logging.debug(f"AI move: {piece.row},{piece.col} to {dest_row},{dest_col}")
                     move_queue.put((piece.row, piece.col, dest_row, dest_col))
                     turn = BLUE
                 else:
@@ -158,11 +172,15 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, 
                         if has_moves:
                             break
                     if not has_moves:
+                        logging.debug(f"No valid moves for AI {'RED' if ai_player == RED else 'BLUE'}")
+                        win_queue.put(BLUE)  # Human (BLUE) wins
                         stop_event.set()
                     else:
+                        logging.error("AI returned None but valid moves exist")
                         stop_event.set()
 
-            except Exception:
+            except Exception as e:
+                logging.error(f"AI exception in Player vs AI: {str(e)}")
                 stop_event.set()
         elif mode != 'aivai':
             time.sleep(0.01)
@@ -174,7 +192,7 @@ async def main():
         {'text': 'MCTS', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 200, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'ai_class': MCTS},
         {'text': 'Heuristic MCTS', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 280, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'ai_class': MCTSHEURISTIC},
         {'text': 'Progressive MCTS', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'ai_class': MCTSPROGRESSIVE},
-        {'text': 'Nested MCTS', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'ai_class': MCTSNESTED},
+        {'text': 'Material Heuristic MCTS', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'ai_class': MCTSMaterialHeuristic},
     ]
     
     buttons = [
@@ -182,7 +200,7 @@ async def main():
         {'text': 'Player vs MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 280, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'mcts'},
         {'text': 'Player vs Heuristic MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai2'},
         {'text': 'Player vs Progressive MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'ai3'},
-        {'text': 'Player vs Nested MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 520, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'nested'},
+        {'text': 'Player vs Material Heuristic MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 520, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'material'},
         {'text': 'AI vs AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 600, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'aivai'},
     ]
 
@@ -280,7 +298,7 @@ async def main():
             'mcts': 'MCTS',
             'ai2': 'Heuristic MCTS',
             'ai3': 'Progressive MCTS',
-            'nested': 'Nested MCTS'
+            'material': 'Material Heuristic MCTS'
         }[mode]
         print(f"BLUE: Human, RED: {ai_name}")
 
@@ -395,17 +413,38 @@ async def main():
                         if selected_piece:
                             if (row, col) in valid_moves:
                                 result = board.move(selected_piece, row, col)
+                                logging.debug(f"Human move: {selected_piece.row},{selected_piece.col} to {row},{col}")
                                 move_queue.put((selected_piece.row, selected_piece.col, row, col))
                                 selected_piece = None
                                 valid_moves = set()
                                 turn = RED if turn == BLUE else BLUE
                             else:
+                                logging.debug(f"Invalid human move attempted: {row},{col}")
                                 selected_piece = None
                                 valid_moves = set()
                         else:
                             if piece != 0 and piece.color == turn:
-                                selected_piece = (piece, row, col)
+                                selected_piece = piece
                                 valid_moves = board.get_valid_moves(piece)
+                                logging.debug(f"Selected piece at {piece.row},{piece.col} with valid moves: {valid_moves}")
+                            else:
+                                logging.debug(f"Clicked on invalid piece or empty square at {row},{col}")
+
+                # Check if human has no valid moves
+                if turn == BLUE and not selected_piece:
+                    has_moves = False
+                    for row in range(ROWS):
+                        for col in range(COLS):
+                            piece = board.get_piece(row, col)
+                            if piece != 0 and piece.color == BLUE and board.can_move(piece):
+                                has_moves = True
+                                break
+                        if has_moves:
+                            break
+                    if not has_moves:
+                        logging.debug("No valid moves for human (BLUE)")
+                        win_queue.put(RED)  # AI (RED) wins
+                        stop_event.set()
             else:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
@@ -415,7 +454,7 @@ async def main():
 
             await asyncio.sleep(1.0 / FPS)
 
-        if platform.system() != 'Emscripten':
+        if platform.system() != "Emscripten":
             game_thread.join(timeout=1)
 
     pygame.quit()
