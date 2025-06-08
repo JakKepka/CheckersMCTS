@@ -48,22 +48,48 @@ def draw_ai_selection_menu(win, buttons, title):
         win.blit(text, text_rect)
     pygame.display.update()
 
+def draw_game_count_menu(win, buttons):
+    win.fill((0, 0, 0))
+    title_text = FONT.render("Select Number of Games", True, TEXT_COLOR)
+    title_rect = title_text.get_rect(center=(WIDTH//2, 100))
+    win.blit(title_text, title_rect)
+    for button in buttons:
+        color = BUTTON_HOVER_COLOR if button['hover'] else BUTTON_COLOR
+        pygame.draw.rect(win, color, button['rect'])
+        text = FONT.render(button['text'], True, TEXT_COLOR)
+        text_rect = text.get_rect(center=button['rect'].center)
+        win.blit(text, text_rect)
+    pygame.display.update()
+
+def draw_win_summary(win, red_wins, blue_wins, red_ai_name, blue_ai_name, current_game, total_games):
+    win.fill((0, 0, 0))
+    summary_text = f"Game {current_game}/{total_games} Completed"
+    red_text = f"RED ({red_ai_name}): {red_wins} wins"
+    blue_text = f"BLUE ({blue_ai_name}): {blue_wins} wins"
+    
+    summary_surface = FONT.render(summary_text, True, TEXT_COLOR)
+    red_surface = FONT.render(red_text, True, TEXT_COLOR)
+    blue_surface = FONT.render(blue_text, True, TEXT_COLOR)
+    
+    win.blit(summary_surface, (WIDTH//2 - summary_surface.get_width()//2, 200))
+    win.blit(red_surface, (WIDTH//2 - red_surface.get_width()//2, 280))
+    win.blit(blue_surface, (WIDTH//2 - blue_surface.get_width()//2, 360))
+    pygame.display.update()
+
 def get_row_col_from_mouse(pos):
     x, y = pos
     row = y // SQUARE_SIZE
     col = x // SQUARE_SIZE
     return row, col
 
-def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
-    turn = BLUE
-    ai_timeout = 3
+def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, win_queue, initial_turn):
+    turn = initial_turn
     iterations = 30 if mode != 'aivai' else 15
 
     while not stop_event.is_set():
         winner = board.get_winner()
         if winner is not None:
-            print(f"Game Over! Winner: {'RED' if winner == RED else 'BLUE'}")
-            time.sleep(2)
+            win_queue.put(winner)
             stop_event.set()
             break
 
@@ -96,7 +122,7 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                     else:
                         stop_event.set()
 
-            except Exception as e:
+            except Exception:
                 stop_event.set()
         elif ai_player and turn == ai_player:
             try:
@@ -136,7 +162,7 @@ def game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event):
                     else:
                         stop_event.set()
 
-            except Exception as e:
+            except Exception:
                 stop_event.set()
         elif mode != 'aivai':
             time.sleep(0.01)
@@ -159,11 +185,22 @@ async def main():
         {'text': 'Player vs Nested MCTS AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 520, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'nested'},
         {'text': 'AI vs AI', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 600, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'mode': 'aivai'},
     ]
+
+    game_count_options = [
+        {'text': '1 Game', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 200, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'count': 1},
+        {'text': '5 Games', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 280, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'count': 5},
+        {'text': '10 Games', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 360, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'count': 10},
+        {'text': '20 Games', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 440, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'count': 20},
+        {'text': '100 Games', 'rect': pygame.Rect(WIDTH//2 - BUTTON_WIDTH//2, 520, BUTTON_WIDTH, BUTTON_HEIGHT), 'hover': False, 'count': 100},
+    ]
+
     mode = None
     ai_red = None
     ai_blue = None
+    num_games = 1
     selecting_red = False
     selecting_blue = False
+    selecting_game_count = False
     clock = pygame.time.Clock()
     FPS = 60
 
@@ -176,6 +213,9 @@ async def main():
             if event.type == pygame.MOUSEMOTION:
                 if selecting_red or selecting_blue:
                     for button in ai_options:
+                        button['hover'] = button['rect'].collidepoint(event.pos)
+                elif selecting_game_count:
+                    for button in game_count_options:
                         button['hover'] = button['rect'].collidepoint(event.pos)
                 else:
                     for button in buttons:
@@ -194,6 +234,13 @@ async def main():
                         if button['rect'].collidepoint(pos):
                             ai_blue = button['ai_class']
                             selecting_blue = False
+                            selecting_game_count = True
+                            break
+                elif selecting_game_count:
+                    for button in game_count_options:
+                        if button['rect'].collidepoint(pos):
+                            num_games = button['count']
+                            selecting_game_count = False
                             mode = 'aivai'
                             break
                 else:
@@ -209,6 +256,8 @@ async def main():
             draw_ai_selection_menu(WIN, ai_options, "Select AI for RED")
         elif selecting_blue:
             draw_ai_selection_menu(WIN, ai_options, "Select AI for BLUE")
+        elif selecting_game_count:
+            draw_game_count_menu(WIN, game_count_options)
         else:
             draw_menu(WIN, buttons)
         await asyncio.sleep(0.016)
@@ -238,70 +287,137 @@ async def main():
     FPS = 60
     iterations = 30 if mode != 'aivai' else 15
     move_queue = queue.Queue()
+    win_queue = queue.Queue()
     stop_event = threading.Event()
 
-    if platform.system() != "Emscripten":
-        game_thread = threading.Thread(target=game_logic, args=(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event))
-        game_thread.daemon = True
-        game_thread.start()
-    else:
-        async def async_game_logic():
-            await game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event)
-        asyncio.create_task(async_game_logic())
+    if mode == 'aivai':
+        red_wins = 0
+        blue_wins = 0
+        for game_num in range(1, num_games + 1):
+            board = Board()  # Reset board for new game
+            # Alternate starting player: BLUE for odd games, RED for even games
+            initial_turn = BLUE if game_num % 2 == 1 else RED
+            turn = initial_turn
+            stop_event.clear()
+            print(f"Starting Game {game_num}/{num_games} (First move: {'BLUE' if initial_turn == BLUE else 'RED'})")
 
-    highlighted_move = None
-    while not stop_event.is_set():
-        clock.tick(FPS)
-        board.draw(WIN)
-        if selected_piece and mode != 'aivai':
-            board.highlight_moves(WIN, valid_moves)
-        if highlighted_move:
-            board.highlight_moves(WIN, {highlighted_move})
-        pygame.display.update()
+            if platform.system() != "Emscripten":
+                game_thread = threading.Thread(target=game_logic, args=(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, win_queue, initial_turn))
+                game_thread.daemon = True
+                game_thread.start()
+            else:
+                async def async_game_logic():
+                    await game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, win_queue, initial_turn)
+                asyncio.create_task(async_game_logic())
 
-        try:
-            move = move_queue.get_nowait()
-            highlighted_move = (move[2], move[3])
-            time.sleep(0.5)
             highlighted_move = None
-        except queue.Empty:
-            pass
+            while not stop_event.is_set():
+                clock.tick(FPS)
+                board.draw(WIN)
+                if highlighted_move:
+                    board.highlight_moves(WIN, {highlighted_move})
+                pygame.display.update()
 
-        if mode != 'aivai':
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    stop_event.set()
-                    pygame.quit()
-                    return
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    pos = pygame.mouse.get_pos()
-                    row, col = get_row_col_from_mouse(pos)
-                    piece = board.get_piece(row, col)
-                    if selected_piece:
-                        if (row, col) in valid_moves:
-                            result = board.move(selected_piece, row, col)
-                            move_queue.put((selected_piece.row, selected_piece.col, row, col))
-                            selected_piece = None
-                            valid_moves = set()
-                            turn = RED if turn == BLUE else BLUE
-                        else:
-                            selected_piece = None
-                            valid_moves = set()
-                    else:
-                        if piece != 0 and piece.color == turn:
-                            selected_piece = piece
-                            valid_moves = board.get_valid_moves(piece)
+                try:
+                    move = move_queue.get_nowait()
+                    highlighted_move = (move[2], move[3])
+                    time.sleep(0.5)
+                    highlighted_move = None
+                except queue.Empty:
+                    pass
+
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        stop_event.set()
+                        pygame.quit()
+                        return
+
+                await asyncio.sleep(1.0 / FPS)
+
+            try:
+                winner = win_queue.get_nowait()
+                if winner == RED:
+                    red_wins += 1
+                elif winner == BLUE:
+                    blue_wins += 1
+                print(f"Game {game_num} Over! Winner: {'RED' if winner == RED else 'BLUE'}")
+                print(f"Current Results: RED ({red_ai_name}): {red_wins} wins, BLUE ({blue_ai_name}): {blue_wins} wins")
+            except queue.Empty:
+                print(f"Game {game_num} ended with no winner")
+                print(f"Current Results: RED ({red_ai_name}): {red_wins} wins, BLUE ({blue_ai_name}): {blue_wins} wins")
+
+            if platform.system() != "Emscripten":
+                game_thread.join(timeout=1)
+
+            # Show win summary and wait automatically
+            draw_win_summary(WIN, red_wins, blue_wins, red_ai_name, blue_ai_name, game_num, num_games)
+            await asyncio.sleep(2)  # 2-second pause
+
+        # Final summary shown above, exits automatically
+    else:
+        if platform.system() != "Emscripten":
+            game_thread = threading.Thread(target=game_logic, args=(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, win_queue, turn))
+            game_thread.daemon = True
+            game_thread.start()
         else:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    stop_event.set()
-                    pygame.quit()
-                    return
+            async def async_game_logic():
+                await game_logic(board, mode, ai_player, ai_red, ai_blue, move_queue, stop_event, win_queue, turn)
+            asyncio.create_task(async_game_logic())
 
-        await asyncio.sleep(1.0 / FPS)
+        highlighted_move = None
+        while not stop_event.is_set():
+            clock.tick(FPS)
+            board.draw(WIN)
+            if selected_piece and mode != 'aivai':
+                board.highlight_moves(WIN, valid_moves)
+            if highlighted_move:
+                board.highlight_moves(WIN, {highlighted_move})
+            pygame.display.update()
 
-    if platform.system() != "Emscripten":
-        game_thread.join(timeout=1)
+            try:
+                move = move_queue.get_nowait()
+                highlighted_move = (move[2], move[3])
+                time.sleep(0.5)
+                highlighted_move = None
+            except queue.Empty:
+                pass
+
+            if mode != 'aivai':
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        stop_event.set()
+                        pygame.quit()
+                        return
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        pos = pygame.mouse.get_pos()
+                        row, col = get_row_col_from_mouse(pos)
+                        piece = board.get_piece(row, col)
+                        if selected_piece:
+                            if (row, col) in valid_moves:
+                                result = board.move(selected_piece, row, col)
+                                move_queue.put((selected_piece.row, selected_piece.col, row, col))
+                                selected_piece = None
+                                valid_moves = set()
+                                turn = RED if turn == BLUE else BLUE
+                            else:
+                                selected_piece = None
+                                valid_moves = set()
+                        else:
+                            if piece != 0 and piece.color == turn:
+                                selected_piece = (piece, row, col)
+                                valid_moves = board.get_valid_moves(piece)
+            else:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        stop_event.set()
+                        pygame.quit()
+                        return
+
+            await asyncio.sleep(1.0 / FPS)
+
+        if platform.system() != 'Emscripten':
+            game_thread.join(timeout=1)
+
     pygame.quit()
 
 if __name__ == "__main__":

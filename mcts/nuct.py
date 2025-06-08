@@ -3,7 +3,7 @@ import copy
 from checkers.board import Board
 from checkers.constants import RED, BLUE, ROWS, COLS
 import math
-
+from mcts.mcts import MCTS
 class Node:
     def __init__(self, board, move=None, parent=None):
         self.board = board
@@ -35,7 +35,7 @@ class Node:
         return exploitation + exploration + nested_term
 
 class MCTSNESTED:
-    def __init__(self, board, player, iterations=300, nested_iterations=50):
+    def __init__(self, board, player, iterations=15, nested_iterations=15):
         self.root_board = board
         self.player = player
         self.opponent = BLUE if player == RED else RED
