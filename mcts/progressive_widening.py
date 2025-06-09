@@ -35,11 +35,6 @@ class MCTSPROGRESSIVE:
         self.player = player
         self.opponent = BLUE if player == RED else RED
         self.iterations = iterations
-        self.lambda_weight = 2.0  # Weight for kings in material heuristic
-        self.material_weight = 0.7  # Weight for material heuristic
-        self.center_weight = 0.3  # Weight for center heuristic
-        self.sigmoid_k = 1.0  # Sigmoid steepness for normalization
-        self.center_squares = [(4, 4), (4, 5), (5, 4), (5, 5)]  # 10x10 board centers
         self.k = 1.0  # Progressive Widening constant
         self.alpha = 0.5  # Progressive Widening exponent
 
@@ -133,7 +128,7 @@ class MCTSPROGRESSIVE:
                 for row in range(ROWS)
             )
             if board_state in seen_states:
-                return 0.5
+                return 0.5  # Draw due to repetition
             seen_states.add(board_state)
 
             capture_moves = []
@@ -162,53 +157,7 @@ class MCTSPROGRESSIVE:
             current_board.move(piece, dest_row, dest_col)
             current_player = BLUE if current_player == RED else RED
 
-        return self._evaluate_board(current_board)
-
-    def _evaluate_board(self, board):
-        """Evaluate board using material and central position heuristics."""
-        player_pieces = 0
-        opponent_pieces = 0
-        player_kings = 0
-        opponent_kings = 0
-        player_center_score = 0.0
-        opponent_center_score = 0.0
-
-        for row in range(ROWS):
-            for col in range(COLS):
-                piece = board.get_piece(row, col)
-                if piece != 0:
-                    min_distance = min(
-                        abs(row - cr) + abs(col - cc) for cr, cc in self.center_squares
-                    )
-                    center_value = 1.0 / max(min_distance, 1)  # Avoid division by zero
-                    if piece.color == self.player:
-                        if piece.king:
-                            player_kings += 1
-                        else:
-                            player_pieces += 1
-                        player_center_score += center_value
-                    else:
-                        if piece.king:
-                            opponent_kings += 1
-                        else:
-                            opponent_pieces += 1
-                        opponent_center_score += center_value
-
-        # Material heuristic: (p_player - p_opponent) + λ * (d_player - d_opponent)
-        material_score = (player_pieces - opponent_pieces) + self.lambda_weight * (player_kings - opponent_kings)
-        material_max = 20 + self.lambda_weight * 10
-        material_normalized = material_score / material_max if material_max != 0 else 0.0
-
-        # Central position heuristic: sum(1/d) for player - sum(1/d) for opponent
-        center_score = player_center_score - opponent_center_score
-        center_max = 20
-        center_normalized = center_score / center_max if center_max != 0 else 0.0
-
-        # Combined heuristic
-        combined_score = self.material_weight * material_normalized + self.center_weight * center_normalized
-        # Apply sigmoid to map to [0, 1]
-        score = 1.0 / (1.0 + math.exp(-self.sigmoid_k * combined_score))
-        return score
+        return 0.5  # Non-terminal state after max steps treated as draw
 
     def _backpropagate(self, node, result):
         while node is not None:

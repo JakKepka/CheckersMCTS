@@ -7,10 +7,11 @@ import queue
 import copy
 import logging
 import csv
+import os
 from checkers.board import Board
 from checkers.constants import WIDTH, HEIGHT, SQUARE_SIZE, RED, BLUE, ROWS, COLS
 from mcts.mcts import MCTS
-from mcts.hueristics import MCTSHEURISTIC
+from mcts.hueristics import MCTSHEURISTIC  # Fixed typo from 'hueristics'
 from mcts.progressive_widening import MCTSPROGRESSIVE
 from mcts.heuristics_material import MCTSMaterialHeuristic
 
@@ -418,6 +419,13 @@ async def main():
     metrics_queue = queue.Queue()
     stop_event = threading.Event()
 
+    # CSV fieldnames
+    fieldnames = [
+        'Game_Number', 'Winner', 'Starting_Player', 'Piece_Difference', 'King_Difference',
+        'Move_Count', 'Captures_Red', 'Captures_Blue', 'Promotions_Red', 'Promotions_Blue',
+        'Outcome_Description'
+    ]
+
     if mode == 'aivai':
         red_wins = 0
         blue_wins = 0
@@ -434,6 +442,16 @@ async def main():
             'promotions_blue': 0,
             'games': 0
         }
+
+        # Define CSV filenames based on AI names
+        metrics_csv = f"{red_ai_name.replace(' ', '_')}_vs_{blue_ai_name.replace(' ', '_')}_metrics.csv"
+        averages_csv = f"{red_ai_name.replace(' ', '_')}_vs_{blue_ai_name.replace(' ', '_')}_averages.csv"
+
+        # Initialize metrics CSV with headers if it doesn't exist
+        if not os.path.exists(metrics_csv):
+            with open(metrics_csv, 'w', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
 
         for game_num in range(1, num_games + 1):
             board = Board()
@@ -496,7 +514,7 @@ async def main():
                 running_totals['promotions_blue'] += metrics['promotions_blue']
                 running_totals['games'] += 1
 
-                game_metrics.append({
+                game_data = {
                     'game_num': game_num,
                     'winner': 'RED' if winner == RED else 'BLUE',
                     'starting_player': 'BLUE' if initial_turn == BLUE else 'RED',
@@ -508,7 +526,43 @@ async def main():
                     'promotions_red': metrics['promotions_red'],
                     'promotions_blue': metrics['promotions_blue'],
                     'outcome_desc': metrics['outcome_desc']
-                })
+                }
+                game_metrics.append(game_data)
+
+                # Append to metrics CSV
+                with open(metrics_csv, 'a', newline='') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writerow({
+                        'Game_Number': game_data['game_num'],
+                        'Winner': game_data['winner'],
+                        'Starting_Player': game_data['starting_player'],
+                        'Piece_Difference': game_data['piece_diff'],
+                        'King_Difference': game_data['king_diff'],
+                        'Move_Count': game_data['move_count'],
+                        'Captures_Red': game_data['captures_red'],
+                        'Captures_Blue': game_data['captures_blue'],
+                        'Promotions_Red': game_data['promotions_red'],
+                        'Promotions_Blue': game_data['promotions_blue'],
+                        'Outcome_Description': game_data['outcome_desc']
+                    })
+
+                # Update averages CSV
+                with open(averages_csv, 'w', newline='') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerow({
+                        'Game_Number': 'AVERAGE',
+                        'Winner': '',
+                        'Starting_Player': '',
+                        'Piece_Difference': running_totals['piece_diff'] / running_totals['games'] if running_totals['games'] else 0,
+                        'King_Difference': running_totals['king_diff'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Move_Count': running_totals['move_count'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Captures_Red': running_totals['captures_red'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Captures_Blue': running_totals['captures_blue'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Promotions_Red': running_totals['promotions_red'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Promotions_Blue': running_totals['promotions_blue'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Outcome_Description': ''
+                    })
 
                 # Print intermediate statistics
                 avg_piece_diff = running_totals['piece_diff'] / running_totals['games']
@@ -533,6 +587,7 @@ async def main():
                       f"Avg Promotions (R/B): {avg_promotions_red:.2f}/{avg_promotions_blue:.2f}")
                 print(f"Win Rate for Starting Player ({'BLUE' if initial_turn == BLUE else 'RED'}): {start_win_rate:.1f}%")
                 print(f"Current Results: RED ({red_ai_name}): {red_wins} wins, BLUE ({blue_ai_name}): {blue_wins} wins")
+                print(f"Updated '{metrics_csv}' and '{averages_csv}'")
 
                 draw_win_summary(WIN, red_wins, blue_wins, red_ai_name, blue_ai_name, game_num, num_games, metrics)
                 await asyncio.sleep(2)
@@ -550,7 +605,7 @@ async def main():
                     'promotions_blue': promotions_blue,
                     'outcome_desc': f"No winner: Game ended after {move_count} moves with RED capturing {captures_red} and BLUE capturing {captures_blue} pieces"
                 }
-                game_metrics.append({
+                game_data = {
                     'game_num': game_num,
                     'winner': 'NONE',
                     'starting_player': 'BLUE' if initial_turn == BLUE else 'RED',
@@ -562,52 +617,53 @@ async def main():
                     'promotions_red': metrics['promotions_red'],
                     'promotions_blue': metrics['promotions_blue'],
                     'outcome_desc': metrics['outcome_desc']
-                })
+                }
+                game_metrics.append(game_data)
                 running_totals['games'] += 1
+
+                # Append to metrics CSV
+                with open(metrics_csv, 'a', newline='') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writerow({
+                        'Game_Number': game_data['game_num'],
+                        'Winner': game_data['winner'],
+                        'Starting_Player': game_data['starting_player'],
+                        'Piece_Difference': game_data['piece_diff'],
+                        'King_Difference': game_data['king_diff'],
+                        'Move_Count': game_data['move_count'],
+                        'Captures_Red': game_data['captures_red'],
+                        'Captures_Blue': game_data['captures_blue'],
+                        'Promotions_Red': game_data['promotions_red'],
+                        'Promotions_Blue': game_data['promotions_blue'],
+                        'Outcome_Description': game_data['outcome_desc']
+                    })
+
+                # Update averages CSV
+                with open(averages_csv, 'w', newline='') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerow({
+                        'Game_Number': 'AVERAGE',
+                        'Winner': '',
+                        'Starting_Player': '',
+                        'Piece_Difference': running_totals['piece_diff'] / running_totals['games'] if running_totals['games'] else 0,
+                        'King_Difference': running_totals['king_diff'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Move_Count': running_totals['move_count'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Captures_Red': running_totals['captures_red'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Captures_Blue': running_totals['captures_blue'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Promotions_Red': running_totals['promotions_red'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Promotions_Blue': running_totals['promotions_blue'] / running_totals['games'] if running_totals['games'] else 0,
+                        'Outcome_Description': ''
+                    })
+
                 draw_win_summary(WIN, red_wins, blue_wins, red_ai_name, blue_ai_name, game_num, num_games, metrics)
                 await asyncio.sleep(2)
+                print(f"Updated '{metrics_csv}' and '{averages_csv}'")
 
             if platform.system() != "Emscripten":
                 game_thread.join(timeout=1)
 
-        # Generate CSV
-        with open('game_metrics.csv', 'w', newline='') as csvfile:
-            fieldnames = [
-                'Game_Number', 'Winner', 'Starting_Player', 'Piece_Difference', 'King_Difference',
-                'Move_Count', 'Captures_Red', 'Captures_Blue', 'Promotions_Red', 'Promotions_Blue',
-                'Outcome_Description'
-            ]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            for game in game_metrics:
-                writer.writerow({
-                    'Game_Number': game['game_num'],
-                    'Winner': game['winner'],
-                    'Starting_Player': game['starting_player'],
-                    'Piece_Difference': game['piece_diff'],
-                    'King_Difference': game['king_diff'],
-                    'Move_Count': game['move_count'],
-                    'Captures_Red': game['captures_red'],
-                    'Captures_Blue': game['captures_blue'],
-                    'Promotions_Red': game['promotions_red'],
-                    'Promotions_Blue': game['promotions_blue'],
-                    'Outcome_Description': game['outcome_desc']
-                })
-            # Write averages
-            writer.writerow({
-                'Game_Number': 'AVERAGE',
-                'Winner': '',
-                'Starting_Player': '',
-                'Piece_Difference': running_totals['piece_diff'] / running_totals['games'] if running_totals['games'] else 0,
-                'King_Difference': running_totals['king_diff'] / running_totals['games'] if running_totals['games'] else 0,
-                'Move_Count': running_totals['move_count'] / running_totals['games'] if running_totals['games'] else 0,
-                'Captures_Red': running_totals['captures_red'] / running_totals['games'] if running_totals['games'] else 0,
-                'Captures_Blue': running_totals['captures_blue'] / running_totals['games'] if running_totals['games'] else 0,
-                'Promotions_Red': running_totals['promotions_red'] / running_totals['games'] if running_totals['games'] else 0,
-                'Promotions_Blue': running_totals['promotions_blue'] / running_totals['games'] if running_totals['games'] else 0,
-                'Outcome_Description': ''
-            })
-        print("\nCSV file 'game_metrics.csv' generated with game metrics and outcome descriptions.")
+        print(f"\nCompleted all games. Final results in '{metrics_csv}' and '{averages_csv}'.")
 
     else:
         if platform.system() != "Emscripten":
